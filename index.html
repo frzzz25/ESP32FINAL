@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ESP32 Control Panel</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #111; color: #fff; }
+    button { margin: 5px; padding: 10px; }
+    .log-box { background: #222; padding: 10px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>LED Control Panel</h1>
+  <button onclick="toggleLED('blue')">Toggle Blue</button>
+  <button onclick="toggleLED('white')">Toggle White</button>
+  <button onclick="toggleLED('green')">Toggle Green</button>
+
+  <h2>Live IR Sensor Logs</h2>
+  <div id="irLogs" class="log-box"></div>
+
+  <h2>LED Control History</h2>
+  <div id="ledLogs" class="log-box"></div>
+
+  <script>
+    async function toggleLED(color) {
+      const res = await fetch("/status");
+      const state = await res.json();
+      const newState = state[color] === "on" ? "off" : "on";
+      await fetch("/control-led", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ color, state: newState })
+      });
+    }
+
+    async function updateLogs() {
+      const res = await fetch("/logs");
+      const { irLogs, ledLogs } = await res.json();
+
+      document.getElementById("irLogs").innerHTML =
+        irLogs.map(l => `<div>${new Date(l.time).toLocaleString()} - ${l.status}</div>`).join("");
+
+      document.getElementById("ledLogs").innerHTML =
+        ledLogs.map(l => `<div>${new Date(l.time).toLocaleString()} - ${l.color.toUpperCase()} turned ${l.state}</div>`).join("");
+    }
+
+    setInterval(updateLogs, 3000);
+    updateLogs();
+  </script>
+</body>
+</html>
