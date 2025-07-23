@@ -1,52 +1,42 @@
-const express = require('express');
-const cors = require('cors');
-const { MongoClient } = require('mongodb');
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const { MongoClient } = require("mongodb");
+
 const app = express();
-
-const PORT = process.env.PORT || 3000;
-const MONGO_URI = "mongodb+srv://frzzz25:00000000@cluster0.mongodb.net/?retryWrites=true&w=majority";
-const DB_NAME = "esp32_logs";
-
-let db, ledState = { blue: "off", white: "off", green: "off" };
+const port = 10000;
 
 app.use(cors());
-app.use(express.json());
-app.use(express.static('public'));
+app.use(bodyParser.json());
 
-MongoClient.connect(MONGO_URI).then(client => {
-  db = client.db(DB_NAME);
-  console.log("MongoDB connected.");
-});
+const uri = "mongodb://frzzz25:00000000@cluster0-shard-00-00.wku9p4h.mongodb.net:27017,cluster0-shard-00-01.wku9p4h.mongodb.net:27017,cluster0-shard-00-02.wku9p4h.mongodb.net:27017/?ssl=true&replicaSet=atlas-4um5lg-shard-0&authSource=admin&retryWrites=true&w=majority";
 
-app.get("/status", (req, res) => {
-  res.json(ledState);
-});
+const client = new MongoClient(uri);
 
-app.post("/control-led", async (req, res) => {
-  const { color, state } = req.body;
-  ledState[color] = state;
-  await db.collection("led_logs").insertOne({
-    color, state,
-    time: new Date()
-  });
-  res.sendStatus(200);
-});
+async function run() {
+  try {
+    await client.connect();
+    const db = client.db("esp32_logs");
+    const collection = db.collection("activities");
 
-app.post("/log-ir", async (req, res) => {
-  const { status } = req.body;
-  await db.collection("ir_logs").insertOne({
-    status,
-    time: new Date()
-  });
-  res.sendStatus(200);
-});
+    app.post("/log", async (req, res) => {
+      const log = req.body;
+      log.timestamp = new Date();
+      await collection.insertOne(log);
+      res.status(200).send("Log saved");
+    });
 
-app.get("/logs", async (req, res) => {
-  const irLogs = await db.collection("ir_logs").find().sort({ time: -1 }).limit(10).toArray();
-  const ledLogs = await db.collection("led_logs").find().sort({ time: -1 }).limit(10).toArray();
-  res.json({ irLogs, ledLogs });
-});
+    app.get("/logs", async (req, res) => {
+      const logs = await collection.find({}).sort({ timestamp: -1 }).limit(50).toArray();
+      res.json(logs);
+    });
 
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+  }
+}
+
+run();
